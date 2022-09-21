@@ -471,7 +471,7 @@ ParticleSystem::reset(ParticleConfig config)
         case CONFIG_GRID:
             {
                 float jitter = m_params.particleRadius*0.01f;
-                uint s = (int) ceilf(powf((float) m_numParticles, 1.0f / 3.0f));
+                uint s = (int) ceilf(floor(powf((float) m_numParticles, 1.0f / 3.0f)*1000)/1000);
                 uint gridSize[3];
                 gridSize[0] = gridSize[1] = gridSize[2] = s;
                 initGrid(gridSize, m_params.particleRadius*2.0f, jitter, m_numParticles);
