@@ -53,33 +53,33 @@ struct integrate_functor
         // set this to zero to disable collisions with cube sides
 #if 1
 
-        if (pos.x > 1.0f - params.particleRadius)
+        if (pos.x > params.worldMaxPos.x - params.dp*0.5)
         {
-            pos.x = 1.0f - params.particleRadius;
+            pos.x = params.worldMaxPos.x - params.dp*0.5;
             vel.x *= params.boundaryDamping;
         }
 
-        if (pos.x < -1.0f + params.particleRadius)
+        if (pos.x < params.worldOrigin.x + params.dp*0.5)
         {
-            pos.x = -1.0f + params.particleRadius;
+            pos.x = params.worldOrigin.x + params.dp*0.5;
             vel.x *= params.boundaryDamping;
         }
 
-        if (pos.y > 1.0f - params.particleRadius)
+        if (pos.y > params.worldMaxPos.y - params.dp*0.5)
         {
-            pos.y = 1.0f - params.particleRadius;
+            pos.y = params.worldMaxPos.y - params.dp*0.5;
             vel.y *= params.boundaryDamping;
         }
 
-        if (pos.z > 1.0f - params.particleRadius)
+        if (pos.z > params.worldMaxPos.z - params.dp*0.5)
         {
-            pos.z = 1.0f - params.particleRadius;
+            pos.z = params.worldMaxPos.z - params.dp*0.5;
             vel.z *= params.boundaryDamping;
         }
 
-        if (pos.z < -1.0f + params.particleRadius)
+        if (pos.z < params.worldOrigin.z + params.dp*0.5)
         {
-            pos.z = -1.0f + params.particleRadius;
+            pos.z = params.worldOrigin.z + params.dp*0.5;
             vel.z *= params.boundaryDamping;
         }
 
@@ -87,17 +87,17 @@ struct integrate_functor
 
         if (params.rigidBottom)
         {
-            if (pos.y < -1.0f + params.particleRadius)
+            if (pos.y < params.worldOrigin.y + params.dp*0.5)
             {
-            pos.y = -1.0f + params.particleRadius;
+            pos.y = params.worldOrigin.y + params.dp*0.5;
             vel.y *= params.boundaryDamping;
             }
         }
         else
         {
-            if (pos.y < -1.0f + params.particleRadius)
+            if (pos.y < params.worldOrigin.y + params.dp*0.5)
             {
-                pos.y = 1.0f - params.particleRadius;
+                pos.y = params.worldMaxPos.y - params.dp*0.5;
                 // vel.x *=0;
                 // vel.y *=0;
                 // vel.z *=0;
@@ -223,22 +223,21 @@ void reorderDataAndFindCellStartD(uint   *cellStart,        // output: cell star
 
 }
 
-// collide two spheres using DEM method
+// interacting two particles using SPH method
 __device__
-float3 collideSpheres(float3 posA, float3 posB,
+float3 SPHParticles(float3 posA, float3 posB,
                       float3 velA, float3 velB,
-                      float radiusA, float radiusB,
-                      float attraction)
+                      float h, float attraction)
 {
     // calculate relative position
     float3 relPos = posB - posA;
 
     float dist = length(relPos);
-    float collideDist = radiusA + radiusB;
+    float interactDist = 2*h;
 
     float3 force = make_float3(0.0f);
 
-    if (dist < collideDist)
+    if (dist < interactDist)
     {
         float3 norm = relPos / dist;
 
@@ -249,7 +248,7 @@ float3 collideSpheres(float3 posA, float3 posB,
         float3 tanVel = relVel - (dot(relVel, norm) * norm);
 
         // spring force
-        force = -params.spring*(collideDist - dist) * norm;
+        force = -params.spring*(interactDist - dist) * norm;
         // dashpot (damping) force
         force += params.damping*relVel;
         // tangential shear force
@@ -263,9 +262,9 @@ float3 collideSpheres(float3 posA, float3 posB,
 
 
 
-// collide a particle against all other particles in a given cell
+// interacting a particle against all others in a given cell
 __device__
-float3 collideCell(int3    gridPos,
+float3 SPHCell(int3    gridPos,
                    uint    index,
                    float3  pos,
                    float3  vel,
@@ -293,8 +292,8 @@ float3 collideCell(int3    gridPos,
                 float3 pos2 = make_float3(oldPos[j]);
                 float3 vel2 = make_float3(oldVel[j]);
 
-                // collide two spheres
-                force += collideSpheres(pos, pos2, vel, vel2, params.particleRadius, params.particleRadius, params.attraction);
+                // interacting two spheres
+                force += SPHParticles(pos, pos2, vel, vel2, params.h, params.attraction);                
             }
         }
     }
@@ -304,7 +303,7 @@ float3 collideCell(int3    gridPos,
 
 
 __global__
-void collideD(float4 *newVel,               // output: new velocity
+void SPHD(float4 *newVel,                   // output: new velocity
               float4 *oldPos,               // input: sorted positions
               float4 *oldVel,               // input: sorted velocities
               uint   *gridParticleIndex,    // input: sorted particle indices
@@ -332,14 +331,14 @@ void collideD(float4 *newVel,               // output: new velocity
         {
             for (int x=-1; x<=1; x++)
             {
-                int3 neighbourPos = gridPos + make_int3(x, y, z);
-                force += collideCell(neighbourPos, index, pos, vel, oldPos, oldVel, cellStart, cellEnd);
+                int3 neighbourPos = gridPos + make_int3(x, y, z); // neighbour cells to be searched
+                force += SPHCell(neighbourPos, index, pos, vel, oldPos, oldVel, cellStart, cellEnd);
             }
         }
     }
 
-    // collide with cursor sphere
-    force += collideSpheres(pos, params.colliderPos, vel, make_float3(0.0f, 0.0f, 0.0f), params.particleRadius, params.colliderRadius, 0.0f);
+    // // collide with cursor sphere
+    // force += collideSpheres(pos, params.colliderPos, vel, make_float3(0.0f, 0.0f, 0.0f), params.particleRadius, params.colliderRadius, 0.0f);
 
     // write new velocity back to original unsorted location
     uint originalIndex = gridParticleIndex[index];

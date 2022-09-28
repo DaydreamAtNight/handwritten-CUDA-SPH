@@ -20,21 +20,25 @@ struct SimParams
 {
     bool rigidBottom;
     
-    float3 colliderPos;
-    float  colliderRadius;
+    // float3 colliderPos;
+    // float  colliderRadius;
 
     float3 gravity;
     float globalDamping;
-    float particleRadius;
+    // float particleRadius;
+
+    float hdp;
+    float dp;
+    float h;
 
     uint3 gridSize;
     uint numCells;
     float3 worldOrigin;
+    float3 worldMaxPos;
     float3 cellSize;
 
     uint numBodies;
-    uint maxParticlesPerCell;
-
+    
     float spring;
     float damping;
     float shear;

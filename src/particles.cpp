@@ -42,10 +42,10 @@
 #define MAX_EPSILON_ERROR 5.00f
 #define THRESHOLD         0.30f
 
-#define GRID_SIZE       64
+#define GRID_LENGTH          2.0f
 #define NUM_PARTICLES   16384
 
-const uint width = 640, height = 480;
+const uint windowWidth = 640, windowHeight = 480;
 
 // view params
 int ox, oy;
@@ -72,11 +72,15 @@ const int idleDelay = 2000;
 
 enum { M_VIEW = 0, M_MOVE };
 
+float gridLength = GRID_LENGTH;
 uint numParticles = 0;
 uint3 gridSize;
 int numIterations = 0; // run until exit
 
 // simulation parameters
+float dp = 2.0f / 64.0f;
+float hdp = 0.5f;
+
 float timestep = 0.5f;
 float damping = 1.0f;
 // float gravity = 0.0003f;
@@ -118,13 +122,13 @@ extern "C" void copyArrayFromDevice(void *host, const void *device, unsigned int
 // initialize particle system
 void initParticleSystem(int numParticles, uint3 gridSize, bool bUseOpenGL)
 {
-    psystem = new ParticleSystem(numParticles, gridSize, bUseOpenGL, rigidBottom);
+    psystem = new ParticleSystem(numParticles, gridSize, bUseOpenGL, rigidBottom, dp, hdp);
     psystem->reset(ParticleSystem::CONFIG_GRID);
 
     if (bUseOpenGL)
     {
         renderer = new ParticleRenderer;
-        renderer->setParticleRadius(psystem->getParticleRadius());
+        renderer->setParticleRadius(psystem->getParticleDp()*0.5f);
         renderer->setColorBuffer(psystem->getColorBuffer());
     }
 
@@ -147,7 +151,7 @@ void initGL(int *argc, char **argv)
 {
     glutInit(argc, argv);
     glutInitDisplayMode(GLUT_RGB | GLUT_DEPTH | GLUT_DOUBLE);
-    glutInitWindowSize(width, height);
+    glutInitWindowSize(windowWidth, windowHeight);
     glutCreateWindow("CUDA Particles");
 
     if (!isGLVersionSupported(2,0) ||
@@ -301,16 +305,19 @@ void display()
     glGetFloatv(GL_MODELVIEW_MATRIX, modelView);
 
     // cube
+    float p = psystem->getWorldOrigin().x+(psystem->getWorldMaxPos().x- psystem->getWorldOrigin().x)/2;
     glColor3f(1.0, 1.0, 1.0);
-    glutWireCube(2.0);
+    glTranslatef(p, p, p);
+    glutWireCube(psystem->getWorldMaxPos().x - psystem->getWorldOrigin().x);
+    glTranslatef(-p, -p, -p);
 
-    // collider
-    glPushMatrix();
-    float3 p = psystem->getColliderPos();
-    glTranslatef(p.x, p.y, p.z);
-    glColor3f(1.0, 0.0, 0.0);
-    glutSolidSphere(psystem->getColliderRadius(), 20, 10);
-    glPopMatrix();
+    // // collider
+    // glPushMatrix();
+    // float3 p = psystem->getColliderPos();
+    // glTranslatef(p.x, p.y, p.z);
+    // glColor3f(1.0, 0.0, 0.0);
+    // glutSolidSphere(psystem->getColliderRadius(), 20, 10);
+    // glPopMatrix();
 
     if (renderer && displayEnabled)
     {
@@ -343,7 +350,7 @@ inline float frand()
 void addSphere()
 {
     // inject a sphere of particles
-    float pr = psystem->getParticleRadius();
+    float pr = psystem->getParticleDp()*0.5f;
     float tr = pr+(pr*2.0f)*ballr;
     float pos[4], vel[4];
     pos[0] = -1.0f + tr + frand()*(2.0f - tr*2.0f);
@@ -478,37 +485,37 @@ void motion(int x, int y)
 
             break;
 
-        case M_MOVE:
-            {
-                float translateSpeed = 0.003f;
-                float3 p = psystem->getColliderPos();
+        // case M_MOVE:
+        //     {
+        //         float translateSpeed = 0.003f;
+        //         float3 p = psystem->getColliderPos();
 
-                if (buttonState==1)
-                {
-                    float v[3], r[3];
-                    v[0] = dx*translateSpeed;
-                    v[1] = -dy*translateSpeed;
-                    v[2] = 0.0f;
-                    ixform(v, r, modelView);
-                    p.x += r[0];
-                    p.y += r[1];
-                    p.z += r[2];
-                }
-                else if (buttonState==2)
-                {
-                    float v[3], r[3];
-                    v[0] = 0.0f;
-                    v[1] = 0.0f;
-                    v[2] = dy*translateSpeed;
-                    ixform(v, r, modelView);
-                    p.x += r[0];
-                    p.y += r[1];
-                    p.z += r[2];
-                }
+        //         if (buttonState==1)
+        //         {
+        //             float v[3], r[3];
+        //             v[0] = dx*translateSpeed;
+        //             v[1] = -dy*translateSpeed;
+        //             v[2] = 0.0f;
+        //             ixform(v, r, modelView);
+        //             p.x += r[0];
+        //             p.y += r[1];
+        //             p.z += r[2];
+        //         }
+        //         else if (buttonState==2)
+        //         {
+        //             float v[3], r[3];
+        //             v[0] = 0.0f;
+        //             v[1] = 0.0f;
+        //             v[2] = dy*translateSpeed;
+        //             ixform(v, r, modelView);
+        //             p.x += r[0];
+        //             p.y += r[1];
+        //             p.z += r[2];
+        //         }
 
-                psystem->setColliderPos(p);
-            }
-            break;
+        //         psystem->setColliderPos(p);
+        //     }
+        //     break;
     }
 
     ox = x;
@@ -551,9 +558,9 @@ void key(unsigned char key, int /*x*/, int /*y*/)
             mode = M_VIEW;
             break;
 
-        case 'm':
-            mode = M_MOVE;
-            break;
+        // case 'm':
+        //     mode = M_MOVE;
+        //     break;
 
         case 'p':
             displayMode = (ParticleRenderer::DisplayMode)
@@ -566,6 +573,10 @@ void key(unsigned char key, int /*x*/, int /*y*/)
 
         case 'u':
             psystem->dumpParticles(0, numParticles-1);
+            break;
+
+        case 'k':
+            psystem->dumpParameters();
             break;
 
         case 'r':
@@ -587,7 +598,7 @@ void key(unsigned char key, int /*x*/, int /*y*/)
         case '4':
             {
                 // shoot ball from camera
-                float pr = psystem->getParticleRadius();
+                float pr = psystem->getParticleDp()*0.5f;
                 float vel[4], velw[4], pos[4], posw[4];
                 vel[0] = 0.0f;
                 vel[1] = 0.0f;
@@ -686,7 +697,6 @@ void initParams()
 
         params->AddParam(new Param<float>("time step", timestep, 0.0f, 1.0f, 0.01f, &timestep));
         params->AddParam(new Param<float>("damping"  , damping , 0.0f, 1.0f, 0.001f, &damping));
-        // params->AddParam(new Param<float>("gravity"  , gravity , 0.0f, 0.001f, 0.0001f, &gravity));
         params->AddParam(new Param<int> ("ball radius", ballr , 1, 20, 1, &ballr));
 
         params->AddParam(new Param<float>("collide spring" , collideSpring , 0.0f, 1.0f, 0.001f, &collideSpring));
@@ -708,7 +718,7 @@ void initMenus()
     glutAddMenuEntry("Reset random [2]", '2');
     glutAddMenuEntry("Add sphere [3]", '3');
     glutAddMenuEntry("View mode [v]", 'v');
-    glutAddMenuEntry("Move cursor mode [m]", 'm');
+    // glutAddMenuEntry("Move cursor mode [m]", 'm');
     glutAddMenuEntry("Toggle point rendering [p]", 'p');
     glutAddMenuEntry("Toggle animation [ ]", ' ');
     glutAddMenuEntry("Step animation [ret]", 13);
@@ -733,7 +743,7 @@ main(int argc, char **argv)
     printf("NOTE: The CUDA Samples are not meant for performance measurements. Results may vary when GPU Boost is enabled.\n\n");
 
     numParticles = NUM_PARTICLES;
-    uint gridDim = GRID_SIZE;
+    gridLength = GRID_LENGTH;
     numIterations = 0;
 
     if (argc > 1)
@@ -743,9 +753,26 @@ main(int argc, char **argv)
             numParticles = getCmdLineArgumentInt(argc, (const char **)argv, "n");
         }
 
-        if (checkCmdLineFlag(argc, (const char **) argv, "grid"))
+        if (checkCmdLineFlag(argc, (const char **) argv, "dp"))
         {
-            gridDim = getCmdLineArgumentInt(argc, (const char **) argv, "grid");
+            dp = getCmdLineArgumentFloat(argc, (const char **) argv, "dp");
+        }
+
+        if (checkCmdLineFlag(argc, (const char **) argv, "hdp"))
+        {
+            hdp = getCmdLineArgumentFloat(argc, (const char **) argv, "hdp");
+        }
+        
+        if (checkCmdLineFlag(argc, (const char **) argv, "gridSize"))
+        {
+            gridLength = getCmdLineArgumentInt(argc, (const char **) argv, "gridSize")*2*dp*hdp;
+            camera_trans_lag[2] = camera_trans[2] = -3*(gridLength/2.0);
+        }
+
+        if (checkCmdLineFlag(argc, (const char **) argv, "gridLength"))
+        {
+            gridLength = getCmdLineArgumentFloat(argc, (const char **) argv, "gridLength");
+            camera_trans_lag[2] = camera_trans[2] = -3*(gridLength/2.0);
         }
 
         if (checkCmdLineFlag(argc, (const char **)argv, "file"))
@@ -756,7 +783,7 @@ main(int argc, char **argv)
         }
     }
 
-    gridSize.x = gridSize.y = gridSize.z = gridDim;
+    gridSize.x = gridSize.y = gridSize.z = (int)(ceilf(floor(gridLength/2/dp/hdp)*1000)/1000);
     printf("grid: %d x %d x %d = %d cells\n", gridSize.x, gridSize.y, gridSize.z, gridSize.x*gridSize.y*gridSize.z);
     printf("particles: %d\n", numParticles);
 

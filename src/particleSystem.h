@@ -23,7 +23,7 @@
 class ParticleSystem
 {
     public:
-        ParticleSystem(uint numParticles, uint3 gridSize, bool bUseOpenGL, bool rigidBottom);
+        ParticleSystem(uint numParticles, uint3 gridSize, bool bUseOpenGL, bool rigidBottom, float dp, float hdp);
         ~ParticleSystem();
 
         enum ParticleConfig
@@ -39,6 +39,7 @@ class ParticleSystem
             VELOCITY,
         };
 
+        void dumpParameters();
         void update(float deltaTime);
         void reset(ParticleConfig config);
 
@@ -108,23 +109,36 @@ class ParticleSystem
             m_params.attraction = x;
         }
 
-        void setColliderPos(float3 x)
+        // void setColliderPos(float3 x)
+        // {
+        //     m_params.colliderPos = x;
+        // }
+
+        float getParticleDp()
         {
-            m_params.colliderPos = x;
+            return m_params.dp;
         }
 
-        float getParticleRadius()
+        float getParticleH()
         {
-            return m_params.particleRadius;
+            return m_params.h;
         }
-        float3 getColliderPos()
+
+        float getParticleHdp()
         {
-            return m_params.colliderPos;
+            return m_params.hdp;
         }
-        float getColliderRadius()
-        {
-            return m_params.colliderRadius;
-        }
+
+        // float3 getColliderPos()
+        // {
+        //     return m_params.colliderPos;
+        // }
+
+        // float getColliderRadius()
+        // {
+        //     return m_params.colliderRadius;
+        // }
+
         uint3 getGridSize()
         {
             return m_params.gridSize;
@@ -133,6 +147,12 @@ class ParticleSystem
         {
             return m_params.worldOrigin;
         }
+
+        float3 getWorldMaxPos()
+        {
+            return m_params.worldMaxPos;
+        }
+
         float3 getCellSize()
         {
             return m_params.cellSize;
@@ -147,7 +167,7 @@ class ParticleSystem
         void _initialize(int numParticles);
         void _finalize();
 
-        void initGrid(uint *size, float spacing, float jitter, uint numParticles);
+        void initGrid(uint *size, float jitter, uint numParticles);
 
     protected: // data
         bool m_bInitialized, m_bUseOpenGL;
@@ -174,8 +194,6 @@ class ParticleSystem
         uint  *m_dCellStart;        // index of start of each cell in sorted list
         uint  *m_dCellEnd;          // index of end of cell
 
-        uint   m_gridSortBits;
-
         uint   m_posVbo;            // vertex buffer object for particle positions
         uint   m_colorVBO;          // vertex buffer object for colors
 
@@ -186,6 +204,8 @@ class ParticleSystem
         struct cudaGraphicsResource *m_cuda_colorvbo_resource; // handles OpenGL-CUDA exchange
 
         // params
+        float m_dp;
+        float m_hdp;
         SimParams m_params;
         uint3 m_gridSize;
         uint m_numGridCells;
